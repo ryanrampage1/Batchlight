@@ -1,8 +1,9 @@
-package co.yello.db.batchinsertsample
+package co.yello.db.batchinsertsample.sql
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import co.yello.db.batchinsertsample.transaction
 import co.yello.db.batchlight.BatchStatement
 import co.yello.db.batchlight.androidsqlite.SQLiteBinderConfig
 import kotlinx.coroutines.*
@@ -103,28 +104,5 @@ class SQLiteHelper(context: Context) : SQLiteOpenHelper(
             INSERT INTO $singleTableName VALUES
             (?, ?, ?)
         """.trimIndent()
-    }
-}
-
-/**
- * Run [body] in a transaction marking it as successful if it completes without exception.
- *
- * @param exclusive Run in `EXCLUSIVE` mode when true, `IMMEDIATE` mode otherwise.
- */
-inline fun <T> SQLiteDatabase.transaction(
-    exclusive: Boolean = true,
-    body: SQLiteDatabase.() -> T
-): T {
-    if (exclusive) {
-        beginTransaction()
-    } else {
-        beginTransactionNonExclusive()
-    }
-    try {
-        val result = body()
-        setTransactionSuccessful()
-        return result
-    } finally {
-        endTransaction()
     }
 }

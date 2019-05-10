@@ -12,5 +12,7 @@
     <string name="more_static_text">Here is some more text to show how fast insert can be</string>
     <string name="progress_percentage" tools:keep="@string/progress_percentage">Inserting %d%% complete</string>
     <string name="single_insert_Time" tools:keep="@string/single_insert_Time">Single insert time was %f</string>
-    <string name="batch_insert_time" tools:keep="@string/batch_insert_time">"Batched insert time was %f</string>
+    <string name="batch_insert_time" tools:keep="@string/batch_insert_time">"Batched insert time (SQLite) was %f</string>
+    <string name="batch_support_insert_time" tools:keep="@string/batch_insert_time">"Batched insert time (SupportSQLite) was %f</string>
+    <string name="room_insert_time" tools:keep="@string/batch_insert_time">"Room insert time was %f</string>
 </resources>

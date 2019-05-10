@@ -57,5 +57,19 @@
                 android:inputType="numberSigned"/>
 
     </com.google.android.material.textfield.TextInputLayout>
+    <TextView
+            tools:text="Support Sqlite batch insert time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/support_batch" android:layout_marginTop="16dp"
+            app:layout_constraintTop_toBottomOf="@+id/single_time" app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintHorizontal_bias="0.5" app:layout_constraintEnd_toEndOf="parent"/>
+    <TextView
+            tools:text="Room insert time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/room_insert" android:layout_marginTop="16dp"
+            app:layout_constraintTop_toBottomOf="@+id/support_batch" app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintHorizontal_bias="0.5" app:layout_constraintEnd_toEndOf="parent"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

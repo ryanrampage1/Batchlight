@@ -13,6 +13,14 @@ import kotlin.system.measureTimeMillis
 import android.view.inputmethod.EditorInfo
 import android.widget.TextView
 import android.widget.TextView.OnEditorActionListener
+import co.yello.db.batchinsertsample.room.MediumSizedRoom
+import co.yello.db.batchinsertsample.room.RoomDemoDatabase
+import co.yello.db.batchinsertsample.room.createMediumRooms
+import co.yello.db.batchinsertsample.sql.MediumSizeObject
+import co.yello.db.batchinsertsample.sql.SQLiteHelper
+import co.yello.db.batchinsertsample.sql.createMediumObjects
+import co.yello.db.batchlight.BatchStatement
+import co.yello.db.batchlight.androidsupportsqlite.SupportSQLiteBinderConfig
 
 
 class MainActivity : AppCompatActivity() {
@@ -27,6 +35,9 @@ class MainActivity : AppCompatActivity() {
 
     private val databaseHelper: SQLiteHelper by lazy {
         SQLiteHelper(this)
+    }
+    private val roomDb by lazy {
+        RoomDemoDatabase.getInstance(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,23 +67,9 @@ class MainActivity : AppCompatActivity() {
         mainScopeJob.cancel()
     }
 
-    /**
-     * Helper function to generate a list of [MediumSizeObject].
-     *
-     * @param count the number of objects to put in the list.
-     */
-    private fun createMediumObjects(count: Int): List<MediumSizeObject> {
-        val text = getString(R.string.static_text)
-        val moreText = getString(R.string.more_static_text)
-
-        return (1..count).map {
-            MediumSizeObject(it, text, moreText)
-        }
-    }
-
     private suspend fun insertItems(items: List<MediumSizeObject>) = withContext(Dispatchers.Main) {
         Log.i(tag, "Starting individual insertion execution.")
-        val time = measureTimeMillis {
+        val time = measureTimeSeconds {
             val channel = Channel<Int>(Channel.CONFLATED)
 
             launch {
@@ -87,21 +84,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val executionTime = time/1000.0
-        single_time.text = getString(R.string.single_insert_Time, executionTime)
-        Log.i(tag, "Finished individual insertion execution in $executionTime seconds.")
+        Log.i(tag, "Finished individual insertion execution in $time seconds.")
+        return@withContext time
     }
 
     private suspend fun batchInsertItems(items: List<MediumSizeObject>) {
         Log.i(tag, "Starting batch insertion execution.")
         batch_time.text = getString(R.string.inserting)
-        val time = measureTimeMillis {
+        val time = measureTimeSeconds {
             databaseHelper.batchInsert(items)
         }
 
-        val executionTime = time/1000.0
-        batch_time.text = getString(R.string.batch_insert_time, executionTime)
-        Log.i(tag, "Finished batch insertion execution in $executionTime seconds.")
+        batch_time.text = getString(R.string.batch_insert_time, time)
+        Log.i(tag, "Finished batch insertion execution in $time seconds.")
     }
 
     private fun generateAndRun(size: Int) {
@@ -109,6 +104,8 @@ class MainActivity : AppCompatActivity() {
 
         batch_time.text = getString(R.string.waiting_to_start)
         single_time.text = getString(R.string.waiting_to_start)
+        support_batch.text = getString(R.string.waiting_to_start)
+        room_insert.text = getString(R.string.waiting_to_start)
 
         // clears out potential existing transactions to restart the SQLite batch insertion job
         Log.i(tag, "Cancel $dbInsertJob")
@@ -120,9 +117,62 @@ class MainActivity : AppCompatActivity() {
         dbInsertJob = mainScope.launch {
             val list = createMediumObjects(size)
 
-            insertItems(list)
+            val singleTime = insertItems(list)
+            single_time.text = getString(R.string.single_insert_Time, singleTime)
+
             batchInsertItems(list)
+
+            val roomList = createMediumRooms(size)
+            clearRoomTables()
+            val roomInsertTime = roomInsert(roomList)
+            room_insert.text = getString(R.string.room_insert_time, roomInsertTime)
+
+            clearRoomTables()
+            val batchTime = batchRoom(roomList)
+            support_batch.text = getString(R.string.batch_support_insert_time, batchTime)
         }
+    }
+
+    private suspend fun batchRoom(items: List<MediumSizedRoom>) = withContext(Dispatchers.IO){
+        Log.i(tag, "Starting batch sql support insertion execution.")
+        val writableDatabase = roomDb.openHelper.writableDatabase
+
+        val binderConfig = SupportSQLiteBinderConfig.getInsertConfig(
+            db = writableDatabase,
+            tableName = "mediumSizedRooms",
+            columnCount = 3
+        )
+        val statement = BatchStatement<MediumSizedRoom>(binderConfig)
+
+        val time = measureTimeSeconds {
+                writableDatabase.transaction {
+                    statement.execute(items) { mediumSizeObject ->
+                        bindLong(mediumSizeObject.id.toLong())
+                        bindString(mediumSizeObject.text)
+                        bindString(mediumSizeObject.moreText)
+                    }
+                }
+
+        }
+
+        Log.i(tag, "Finished batch insertion execution in $time seconds.")
+        return@withContext time
+    }
+
+
+    private suspend fun roomInsert(items: List<MediumSizedRoom>) = withContext(Dispatchers.IO) {
+        Log.i(tag, "Starting individual insertion execution.")
+        val dao = roomDb.getMediumSizedDao()
+        val time = measureTimeSeconds {
+            dao.insertAll(items)
+        }
+
+        Log.i(tag, "Finished individual insertion execution in $time seconds.")
+        return@withContext time
+    }
+
+    private suspend fun clearRoomTables() = withContext(Dispatchers.IO) {
+        roomDb.clearAllTables()
     }
 
     private fun insertsPerOnePercent(totalCount: Int) = if (totalCount <= 100) {
@@ -147,3 +197,5 @@ fun CoroutineScope.calcProgress(
         }
     }
 }
+
+inline fun measureTimeSeconds(block: () -> Unit) = measureTimeMillis(block) / 1000.0
