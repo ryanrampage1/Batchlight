@@ -1,5 +1,14 @@
 package co.yello.db.batchlight
 
+import android.database.sqlite.SQLiteDatabase
+import co.yello.db.batchlight.androidsqlite.AndroidSQLiteBinder
+import co.yello.db.batchlight.androidsqlite.SQLiteBinderConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+import java.sql.Statement
+
 /**
  * Drives the inserts into the database.
  *
@@ -51,10 +60,26 @@ class BatchStatement<T>(
      * }
      * ```
      */
-    fun execute(itemsToInsert: Collection<T>, bindItemFunction: BatchBinder.(T) -> Unit) {
-        itemsToInsert.asSequence()
+    suspend fun execute(itemsToInsert: Collection<T>, bindItemFunction: BatchBinder.(T) -> Unit) {
+        itemsToInsert
             .chunked(binderConfig.maxInsertSize)
-            .forEach { maxSizeList -> performInsert(maxSizeList, bindItemFunction) }
+//            .map { helper(getBinder(it.size), it) }
+            .toList()
+            .pmap { prepareBinder(getBinder(it.size), it, bindItemFunction) }
+//            .forEach { binder ->
+//                (binderConfig as SQLiteBinderConfig).db.transaction {
+//                    binder.execute()
+//                }
+//            }
+//            .forEach { maxSizeList -> performInsert(maxSizeList, bindItemFunction) }
+    }
+
+    fun getBinder(size: Int): Binder {
+      return if (size == binderConfig.maxInsertSize) {
+            binderConfig.maxInsertBinder
+        } else {
+            binderConfig.buildBinder(size)
+        }
     }
 
     /**
@@ -63,12 +88,7 @@ class BatchStatement<T>(
      * @param collection The collection of items to be bound and executed.
      * @param bindItem The bind statement to execute on each item of the collection.
      */
-    private fun performInsert(collection: Collection<T>, bindItem: BatchBinder.(T) -> Unit) {
-        val statement = if (collection.size == binderConfig.maxInsertSize) {
-            binderConfig.maxInsertBinder
-        } else {
-            binderConfig.buildBinder(collection.size)
-        }
+    private fun prepareBinder(statement: Binder, collection: Collection<T>, bindItem: BatchBinder.(T) -> Unit) {
 
         val binder = BatchBinder(statement, binderConfig.startIndex)
 
@@ -81,6 +101,36 @@ class BatchStatement<T>(
                     "found ${binder.currentBindIndex / collection.size} binds per record."
         }
 
-        statement.execute()
+//        (binderConfig as SQLiteBinderConfig).db.transaction {
+            statement.execute()
+//        }
+    }
+
+    suspend fun <A, B> Iterable<A>.pmap(f: suspend (A) -> B): List<B> = withContext(Dispatchers.Default) {
+        map { async { f(it) } }.map { it.await() }
+    }
+}
+
+
+/**
+ * Run [body] in a transaction marking it as successful if it completes without exception.
+ *
+ * @param exclusive Run in `EXCLUSIVE` mode when true, `IMMEDIATE` mode otherwise.
+ */
+inline fun <T> SQLiteDatabase.transaction(
+    exclusive: Boolean = true,
+    body: SQLiteDatabase.() -> T
+): T {
+    if (exclusive) {
+        beginTransaction()
+    } else {
+        beginTransactionNonExclusive()
+    }
+    try {
+        val result = body()
+        setTransactionSuccessful()
+        return result
+    } finally {
+        endTransaction()
     }
 }

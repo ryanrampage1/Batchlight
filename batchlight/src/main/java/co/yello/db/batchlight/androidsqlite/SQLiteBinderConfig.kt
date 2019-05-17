@@ -19,7 +19,7 @@ import co.yello.db.batchlight.sqlMaxBinds
  * @param maxFields the maximum number of binds that can happen per statement.
  */
 class SQLiteBinderConfig(
-    private val db: SQLiteDatabase,
+     val db: SQLiteDatabase,
     private val batchStatement: String,
     override val fieldsPerItem: Int,
     override val maxFields: Int
@@ -31,6 +31,7 @@ class SQLiteBinderConfig(
      */
     override val maxInsertSize= if (fieldsPerItem > 0) maxFields / fieldsPerItem else 1
 
+
     /**
      * For a SQLite insert statement each item has the format (?, ?, ?)
      */
@@ -40,16 +41,21 @@ class SQLiteBinderConfig(
         separator = ",",
         postfix= ")"
     )
+    val allObjects = (1..maxInsertSize).joinToString(",") { objectStatement }
 
-    override val maxInsertBinder: Binder by lazy {
-        buildBinder(maxInsertSize)
-    }
+    override val maxInsertBinder: Binder
+       get() =  buildBinder(maxInsertSize)
+
 
     override val startIndex: Int = sqlAndroidPreparedStatementStartIndex
 
     override fun buildBinder(insertCount: Int): Binder {
-        val allObjects = (1..insertCount).joinToString(",") { objectStatement }
-        val compiledStatement =  db.compileStatement("$batchStatement $allObjects")
+        val s = if (insertCount == maxInsertSize) {
+            allObjects
+        } else {
+             (1..insertCount).joinToString(",") { objectStatement }
+        }
+        val compiledStatement =  db.compileStatement("$batchStatement $s")
         return AndroidSQLiteBinder(compiledStatement)
     }
 
